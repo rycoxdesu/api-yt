@@ -2,13 +2,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import yt_dlp
 import subprocess
-import os
 
 app = FastAPI()
-
-# Pastikan direktori downloads ada
-DOWNLOADS_DIR = "downloads"
-os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 # Path cookies
 COOKIES_PATH = "cookies.txt"
@@ -30,8 +25,6 @@ async def play_song(request: SongRequest):
             # Menggunakan yt-dlp untuk mencari video YouTube berdasarkan judul
             ydl_opts = {
                 'format': 'bestaudio/best',
-                'extractaudio': True,
-                'audioformat': 'mp3',
                 'quiet': True,
                 'no_warnings': True,
                 'noplaylist': True,
@@ -45,27 +38,20 @@ async def play_song(request: SongRequest):
                 else:
                     raise HTTPException(status_code=404, detail="No results found!")
 
-        # File output
-        output_path = os.path.join(DOWNLOADS_DIR, "output.mp3")
-        
-        # Menggunakan subprocess untuk streaming audio dengan cookies
+        # Menggunakan subprocess untuk stream audio
         process = subprocess.Popen(
             [
-                "yt-dlp", "-f", "bestaudio/best", "--extract-audio", "--audio-format", "mp3",
-                "--cookies", COOKIES_PATH, "-o", output_path, video_url
+                "yt-dlp", "-f", "bestaudio", "--cookies", COOKIES_PATH,
+                "-o", "-", video_url
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        
-        stdout, stderr = process.communicate()
-        if process.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"yt-dlp error: {stderr.decode()}")
 
-        return {"message": "Song downloaded successfully", "file": output_path}
+        return {"message": "Streaming audio...", "stream_url": video_url}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"There was an error: {str(e)}")
 
-# Jalankan API dengan perintah berikut di terminal:
+# Jalankan API dengan perintah:
 # uvicorn main:app --host 127.0.0.1 --port 8000
