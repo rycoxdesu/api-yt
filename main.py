@@ -1,6 +1,7 @@
 import os
 import logging
 import subprocess
+import base64
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import yt_dlp
@@ -20,6 +21,18 @@ app = FastAPI()
 # Path cookies
 COOKIES_PATH = "cookies.txt"
 
+# Cek dan decode cookies dari environment variable
+cookies_base64 = os.getenv("COOKIES_BASE64")
+if cookies_base64:
+    try:
+        logging.info("📥 Decode cookies dari environment variable...")
+        with open(COOKIES_PATH, "wb") as f:
+            f.write(base64.b64decode(cookies_base64))
+        logging.info(f"✅ Cookies berhasil disimpan di: {COOKIES_PATH}")
+    except Exception as e:
+        logging.error(f"❌ Gagal decode cookies: {e}")
+
+# Model request
 class SongRequest(BaseModel):
     song: str
 
@@ -35,19 +48,16 @@ async def play_song(request: SongRequest):
     # Cek apakah file cookies ada
     if os.path.exists(COOKIES_PATH):
         logging.info(f"✅ Cookies ditemukan: {COOKIES_PATH}")
-        with open(COOKIES_PATH, "r", encoding="utf-8") as f:
-            cookies_content = f.read()
-            logging.info(f"📜 Isi Cookies:\n{cookies_content}")
     else:
-        logging.warning(f"❌ Cookies TIDAK ditemukan: {COOKIES_PATH}")
+        logging.warning(f"❌ Cookies TIDAK ditemukan! Streaming mungkin gagal.")
 
     try:
-        # Cek apakah input song berupa URL atau judul lagu
+        # Jika input berupa URL, langsung pakai URL
         if song.startswith("http"):
             video_url = song
             logging.info(f"🔗 Menggunakan URL langsung: {video_url}")
         else:
-            # Menggunakan yt-dlp untuk mencari video YouTube berdasarkan judul
+            # Cari lagu di YouTube
             logging.info(f"🔍 Mencari lagu di YouTube: {song}")
 
             ydl_opts = {
@@ -55,7 +65,7 @@ async def play_song(request: SongRequest):
                 "quiet": True,
                 "no_warnings": True,
                 "noplaylist": True,
-                "cookies": COOKIES_PATH,
+                "cookies": COOKIES_PATH if os.path.exists(COOKIES_PATH) else None,
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -67,7 +77,7 @@ async def play_song(request: SongRequest):
                     logging.warning("❌ Tidak ada hasil ditemukan!")
                     raise HTTPException(status_code=404, detail="No results found!")
 
-        # Menggunakan subprocess untuk stream audio
+        # Stream audio menggunakan yt-dlp
         logging.info(f"🎶 Streaming audio dari: {video_url}")
         process = subprocess.Popen(
             [
@@ -84,5 +94,5 @@ async def play_song(request: SongRequest):
         logging.error(f"❌ ERROR: {str(e)}")
         raise HTTPException(status_code=500, detail=f"There was an error: {str(e)}")
 
-# Jalankan API dengan perintah:
-# uvicorn main:app --host 127.0.0.1 --port 8000
+# Jalankan API dengan:
+# uvicorn main:app --host 0.0.0.0 --port 8080
